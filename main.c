@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <math.h>
 
 typedef struct {
     int rank;
@@ -22,10 +23,21 @@ tensor* create_tensor(int rank, int * shape)
 
     int num_elems = 1;
     for (int i = 0; i < rank; i++) {
-        num_elems += shape[i];
+        num_elems *= shape[i];
     }
     t->data = (float*) malloc(num_elems * sizeof(float));
     return t;
+}
+
+int tensor_num_elems(tensor * t)
+{   
+    // calculate the number of elements that the tensor
+    // contains
+    int num_elements = 1;
+    for (int i = 0; i < t->rank; i++) {
+        num_elements *= t->shape[i];
+    }
+    return num_elements;
 }
 
 // both of these methods return a slice of the given array
@@ -76,9 +88,12 @@ tensor* tensor_slice_dim0(tensor * t, int d0)
 
     // load the slice of data from the source tensor on to the 
     // slice tensor's data
+    int j = 0;
     for (int i = start_idx; i < end_idx; i++) {
-        
+        slice->data[j] = t->data[i];
+        j++;
     }
+    return slice;
 }
 
 void free_tensor(tensor* t) 
@@ -155,6 +170,46 @@ void broadcast_multiply(tensor * t, float value)
     }
 }
 
+// every value of t becomes equal to exp(t)
+void tensor_exp(tensor * t) 
+{
+    int num_elems = tensor_num_elems(t);
+    for (int i = 0; i < num_elems; i++) {
+        float data_i = t->data[i];
+        data_i = exp(data_i);
+        t->data[i] = data_i;
+    }
+}
+
+// just calculate the sum of every element in the tensor
+float tensor_sum_d0(tensor * t)
+{
+    int num_elems = tensor_num_elems(t);
+    float summation = 0;
+    for (int i = 0 ; i < num_elems; i++) {
+        summation += t->data[i];
+    }
+    return summation;
+}
+
+// map a function on to every element of a tensor
+void tensor_map_d0(tensor * t, float (*map_function)(float) )
+{
+    int num_elems = tensor_num_elems(t);
+    for (int i = 0; i < num_elems; i++) {
+        float map_val = map_function(t->data[i]);
+        t->data[i] = map_val;
+    }
+}
+/*
+// calculate softmax on the tensor, over every single element in the tensor
+void tensor_softmax_d0(tensor * t)
+{
+    // get the exponent
+    tensor_exp(t);
+    float sum = tensor_sum_d0(t);
+}
+*/
 tensor* matmul(tensor* m1, tensor* m2)
 {
     //check for shape compatibility
@@ -182,22 +237,46 @@ tensor* matmul(tensor* m1, tensor* m2)
 }
 
 
-// assuming that the rank of the tensor is 2
+
 void print_tensor(tensor * t) {
 
-    int R = t->shape[0];
-    int C = t->shape[1];
-    for (int i = 0; i < R; i++) {
-        printf("[ ");
-        for (int j = 0; j < C; j++) {
-            int idx[2] = {i, j};
+    printf("\n");
+
+    if (t->rank == 1) {
+        printf("[");
+        for (int i = 0; i < t->shape[0]; i++) {
+            int idx[1] = {i};
             float elem = get_tensor_element(t, idx);
-            printf(" %f ",elem);
+            printf(" %f ", elem);
         }
         printf("]\n");
+    } else {
+
+        int R = t->shape[0];
+        int C = t->shape[1];
+        for (int i = 0; i < R; i++) {
+            printf("[ ");
+            for (int j = 0; j < C; j++) {
+                int idx[2] = {i, j};
+                float elem = get_tensor_element(t, idx);
+                printf(" %f ",elem);
+            }
+            printf("]\n");
+        }
     }
+    printf("shape: (");
+    for (int i = 0; i < t->rank; i++) {
+        printf(" %d", t->shape[i]);
+        if (i != t->rank-1) {
+            printf(",");
+        } else {
+            printf(" ");
+        }
+    }
+    printf(")\n");
 }
 
+/*
 // calculate the determinant of a matrix
 // calling this function assumes that the input tensor is 
 // 2 dimensional
@@ -212,38 +291,82 @@ float recursive_determinant(tensor * mat)
         int idx_10[2] = {1,0};
         float d1 = get_tensor_element(mat, idx_00) * get_tensor_element(mat, idx_11);
         float d2 = get_tensor_element(mat, idx_01) * get_tensor_element(mat, idx_10);
-        return d1 * d2;
+        return d1 - d2;
+    } else {
+        // get the top row of the tensor
+        tensor * top_row = tensor_slice_dim0(mat, 0);
+
+        printf("top row: \n");
+        print_tensor(top_row);
+
+        // the determinant
+        float det = 0.0;
+
+        // the changing sign that will indicate whether to
+        // add or subtract each recursive matrix
+        float sign = 1.0;
+
+        // the number of columns that mat has
+        int mat_n_cols = mat->shape[1];
+        // the number of rows that mat has
+        int mat_n_rows = mat->shape[0];
+
+        // loop through the top row, and find the values of
+        // the sub-determinants recursively
+        for (int i = 0; i < mat_n_cols; i++) {
+            // grab the matrix made by all the values that
+            // are not in top row element i's row or column, 
+            int non_overlap_shape[2] = {mat->shape[0] - 1, mat->shape[1] - 1};
+            tensor * non_overlap = create_tensor(2,non_overlap_shape);
+
+            print_tensor(non_overlap);
+
+            int k = 0;
+            int mat_elems = tensor_num_elems(mat);
+
+            // ensure that j does not signify an element of mat that is
+            // in it's first row, by starting at the element that 
+            // is one column in to mat
+            for (int j = mat_n_cols; j < mat_elems; j++) {
+                // make sure that j is not in the column of i
+                if (j % i != 0) {
+                    non_overlap->data[k] = mat->data[j];
+                    k++;
+                }
+            }
+
+            print_tensor(non_overlap);
+
+            // free the non_overlap matrix
+            free_tensor(non_overlap);
+            // flip the sign for each element
+            sign = -sign;
+        }
+
+        //free the top row
+        free_tensor(top_row);
+
+        return det;
     }
-
-    
 }
-
+*/
 
 int main()
 {
-    int shape0[2] = {2,4};
-    tensor* t0 = create_tensor(2,shape0);
+    int shape0[2] = {3,3};
+    tensor* t0 = create_tensor(2, shape0);
+    float k = 0;
+    for (int i = 0; i < tensor_num_elems(t0); i++) {
+        t0->data[i] = k;
+        k++;
+    }
 
-    int shape1[2] = {4,2};
-    tensor* t1 = create_tensor(2, shape1);
+    print_tensor(t0);
 
-    broadcast_set(t0, 1.0);
-    broadcast_set(t1, 1.0);
+    tensor_exp(t0);
 
-    tensor* t3 = matmul(t0, t1);
-
-    broadcast_add(t3, 0.5);
-
-    print_tensor(t3);
-
-    //float det = recursive_determinant(t3);
-    //printf("matrix determinant: %f", det);
-
-
-    
-
-
-    free_tensor(t0);
+    print_tensor(t0);
+   
 
     return 0;
 }
