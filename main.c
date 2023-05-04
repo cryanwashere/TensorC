@@ -201,15 +201,20 @@ void tensor_map_d0(tensor * t, float (*map_function)(float) )
         t->data[i] = map_val;
     }
 }
-/*
+
 // calculate softmax on the tensor, over every single element in the tensor
 void tensor_softmax_d0(tensor * t)
 {
     // get the exponent
     tensor_exp(t);
     float sum = tensor_sum_d0(t);
+    int num_elems = tensor_num_elems(t);
+    for (int i = 0; i < num_elems; i++) {
+        t->data[i] = t->data[i] / sum;
+    }
 }
-*/
+
+
 tensor* matmul(tensor* m1, tensor* m2)
 {
     //check for shape compatibility
@@ -351,6 +356,11 @@ float recursive_determinant(tensor * mat)
 }
 */
 
+float add1(float x) 
+{
+    return x + 1;
+}
+
 int main()
 {
     int shape0[2] = {3,3};
@@ -363,9 +373,10 @@ int main()
 
     print_tensor(t0);
 
-    tensor_exp(t0);
+    tensor_softmax_d0(t0);
 
     print_tensor(t0);
+
    
 
     return 0;
