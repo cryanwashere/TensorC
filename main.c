@@ -126,10 +126,7 @@ void broadcast_set(tensor * t, float value)
 {
     // calculate the number of elements that the tensor
     // contains
-    int num_elements = 1;
-    for (int i = 0; i < t->rank; i++) {
-        num_elements *= t->shape[i];
-    }
+    int num_elements = tensor_num_elems(t);
 
     // loop through the data of the tensor, and set each 
     // element to the value
@@ -361,21 +358,26 @@ float add1(float x)
     return x + 1;
 }
 
+// create a tensor of all ones
+tensor * create_tensor_ones(int rank, int * shape)
+{
+    tensor * t = create_tensor(rank, shape);
+    broadcast_set(t, 1.0);
+    return t;
+}
+
 int main()
 {
-    int shape0[2] = {3,3};
-    tensor* t0 = create_tensor(2, shape0);
-    float k = 0;
-    for (int i = 0; i < tensor_num_elems(t0); i++) {
-        t0->data[i] = k;
-        k++;
-    }
+    int shape0[2] = {3,64};
+    tensor * t0 = create_tensor_ones(2, shape0);
 
-    print_tensor(t0);
+    int shape1[2] = {64,3};
+    tensor * t1 = create_tensor_ones(2, shape1);
+   
+    
+    tensor * t3 = matmul(t0, t1);
 
-    tensor_softmax_d0(t0);
-
-    print_tensor(t0);
+    print_tensor(t3);
 
    
 
